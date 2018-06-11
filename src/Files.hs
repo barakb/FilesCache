@@ -5,14 +5,16 @@ module Files where
 import           Conduit                      (runConduit, (.|))
 import           Control.Monad.Trans.Resource (runResourceT)
 import           Data.Conduit.Binary          (sinkFile)
-import           Network.HTTP.Conduit
-import           Numeric
+import           Numeric                      (showFFloat)
 
 import           Control.Monad.IO.Class       (liftIO)
-import qualified Data.ByteString.Char8        as BC
+import qualified Data.ByteString.Char8        as BC (unpack)
 import           Data.Maybe                   (listToMaybe, maybe)
-import           Network.HTTP.Simple
-import           Network.HTTP.Types.Status
+import           Network.HTTP.Simple          (getResponseBody,
+                                               getResponseHeader,
+                                               getResponseStatus, httpSource,
+                                               parseRequest)
+import           Network.HTTP.Types.Status    (statusMessage)
 
 
 showAsMB ::Int -> String

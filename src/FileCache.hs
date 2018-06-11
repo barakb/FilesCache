@@ -1,11 +1,11 @@
 module FileCache where
-import           Control.Concurrent.Async
-import           Control.Concurrent.MVar
-import           Control.Exception.Safe
-import           Data.Map.Strict          as M hiding (drop)
+import           Control.Concurrent.Async (Async, async, wait)
+import           Control.Concurrent.MVar  (MVar, modifyMVar, newMVar)
+import           Control.Exception.Safe   (catch, onException, throwIO)
+import           Data.Map.Strict          as M (Map, empty, insert, lookup)
 import           Files                    (downloadURL)
-import           Network.URI
-import           System.Directory
+import           Network.URI              (parseURI, uriPath)
+import           System.Directory         (removeFile)
 import           System.FilePath.Posix    (takeFileName)
 import           System.IO.Error          (isDoesNotExistError)
 
@@ -52,10 +52,11 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
 url1::String
 url1 = "http://hercules/12.3.1/master/19208-19/gigaspaces-xap-enterprise-12.3.1-m9-b19208-19.zip"
 
+dl:: IO(Maybe String)
 dl = do
   cache <- FileCache.empty
   asyn <- getFilePath "http://hercules/12.3.1/master/19208-19/gigaspaces-xap-enterprise-12.3.1-m9-b19208-19.zip" cache
-  wait asyn
+  _ <- wait asyn
   putStrLn " Done with the first file"
   asyn1 <- getFilePath "http://hercules/12.3.1/master/19208-19/gigaspaces-xap-enterprise-12.3.1-m9-b19208-19.zip" cache
   putStrLn " Done with the second file"
