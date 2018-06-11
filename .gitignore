@@ -1,1 +1,5 @@
 *~
+*.iml
+TAGS
+.stack-work
+.idea
