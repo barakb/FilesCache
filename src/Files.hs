@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Files where
 
@@ -8,13 +9,13 @@ import           Data.Conduit.Binary          (sinkFile)
 import           Numeric                      (showFFloat)
 
 import           Control.Monad.IO.Class       (liftIO)
-import qualified Data.ByteString.Char8        as BC (unpack)
+import qualified Data.ByteString.Char8        as BC (unpack, null)
 import           Data.Maybe                   (listToMaybe, maybe)
 import           Network.HTTP.Simple          (getResponseBody,
                                                getResponseHeader,
                                                getResponseStatus, httpSource,
                                                parseRequest)
-import           Network.HTTP.Types.Status    (statusMessage)
+import           Network.HTTP.Types.Status    (statusMessage, statusIsSuccessful)
 
 
 showAsMB ::Int -> String
@@ -32,7 +33,11 @@ downloadURL url location = do
    where
      getSrc res = do
          liftIO $ putStrLn $ (BC.unpack . statusMessage . getResponseStatus) res ++ " (" ++ formatSize res ++ ") " ++ url
-         getResponseBody res
+         let status = statusIsSuccessful . getResponseStatus $ res
+         if status then
+            getResponseBody res
+         else
+            return ()
      formatSize res = maybe "unknown" showAsMB (listToMaybe (getResponseHeader "Content-Length" res) >>= stringToInt . BC.unpack)
 
 
@@ -40,3 +45,5 @@ stringToInt :: String -> Maybe Int
 stringToInt cs =  case reads cs :: [(Int,String)] of
                       [(n, _)] -> Just n
                       _        -> Nothing
+
+

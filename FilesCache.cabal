@@ -35,4 +35,5 @@ executable FilesCache
                      , network-uri
                      , safe-exceptions
                      , filepath
+                     , unix
                      , warp == 3.2.22
