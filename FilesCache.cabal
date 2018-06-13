@@ -17,11 +17,12 @@ executable FilesCache
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
-  other-modules:       FileCache, Files
+  other-modules:       FileCache, Files, Log, Env
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , bytestring
                      , wai
+                     , http-client
                      , HTTP
                      , http-types
                      , async
@@ -36,4 +37,6 @@ executable FilesCache
                      , safe-exceptions
                      , filepath
                      , unix
+                     , text
+                     , criterion
                      , warp == 3.2.22
