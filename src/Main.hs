@@ -5,12 +5,12 @@ module Main where
 
 import           Control.Concurrent.Async  (waitCatch)
 import           Control.Monad.Reader      (liftIO, runReaderT)
-import           Criterion.Measurement     (getTime, secs)
 import           Data.List                 (intercalate)
 import           Data.Text                 as T (unpack)
 import           Env                       (App, Env (..))
-import           FileCache                 (empty, getFilePath)
-import           Log                       (createLogF, say)
+import           FileCache                 (fromFile, getFilePath, keys,
+                                            removeEntry)
+import           Log                       (createLogF, say, timeCommand)
 import           Network.HTTP.Types        (notFound404, status200)
 import           Network.HTTP.Types.Header (hContentType)
 import           Network.Wai               (Application, Request (..), Response,
@@ -24,8 +24,10 @@ import           System.FilePath.Posix     (takeExtension)
 main :: IO ()
 main = do
   let port = 3000
-  cache <- FileCache.empty
+  cache <- FileCache.fromFile "."
   logFunc <- createLogF
+  itemsInCache <- FileCache.keys cache
+  logFunc $ "Building cache from " ++ show itemsInCache
   logFunc $ "Listening on port " ++ show port
   let env = Env{envLog = logFunc, envCache=cache}
   run port $ app env
@@ -37,14 +39,15 @@ runWithEnv :: Request -> (Response -> IO ResponseReceived) -> App ResponseReceiv
 runWithEnv request respond =
     case getRequestedFileName request of
         Just (fullPath, fileName) -> do
-           say $ "request for: " ++ fileName ++ " full path is " ++ fullPath
-           asyn <- getFilePath fullPath
-           (t , maybeFile) <- liftIO $ timeIt $ waitCatch asyn
-           say $ fullPath ++ " took " ++ secs t
+           say $ "requested: " ++ fileName ++ " [" ++ fullPath ++ "]"
+           asyn <- getFilePath fileName fullPath
+           maybeFile <- timeCommand ("download of file [" ++ fileName ++ "]") (liftIO $ waitCatch asyn)
            case maybeFile of
-              Right localPath -> liftIO $ respond $ responseFile status200 [(hContentType, "text/plain")] localPath Nothing
+              Right localPath ->
+                timeCommand ("Serving file: " ++ localPath) $ liftIO $ respond $ responseFile status200 [(hContentType, "text/plain")] localPath Nothing
               Left err -> do
                say $ "Error while trying to retrieve " ++ fullPath ++ " " ++ show err
+               removeEntry fileName
                liftIO $ respond $ responseLBS notFound404 [(hContentType, "text/plain")] "Failed to bring file to cache"
         Nothing -> liftIO $ respond $ responseLBS notFound404 [(hContentType, "text/plain")] "Not Found"
 
@@ -61,9 +64,3 @@ getRequestedFileName req = let pathInfo' =  T.unpack <$> pathInfo req
                                else
                                   Nothing
 
-timeIt :: IO a -> IO (Double, a)
-timeIt action = do
-    start <- getTime
-    a <- action
-    end <- getTime
-    return (end - start, a)

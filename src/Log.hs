@@ -1,12 +1,15 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Log where
-import Control.Concurrent.MVar  (MVar, newMVar, takeMVar, putMVar)
+import Control.Concurrent.MVar  (MVar, newMVar, takeMVar, putMVar, readMVar)
 import Control.Exception (bracket)
 import Control.Monad.Reader
 import Env
 import Control.Concurrent (myThreadId)
 import Data.Time.Clock(getCurrentTime)
 import Data.Time.Format(formatTime, defaultTimeLocale)
+import           Criterion.Measurement(getTime, secs)
+import           Data.Map.Strict          as M (keys)
+
 
 logf :: MVar Bool -> String -> IO ()
 logf mvar msg = bracket lock unloack logMessage
@@ -27,6 +30,21 @@ createLogF = do
               thread <- myThreadId
               time <- liftIO getCurrentTime
               logf logMvar $ "[" ++  formatTime defaultTimeLocale "%H:%M:%S%Q %z"  time ++ "][" ++ show thread ++ "] -> " ++ msg)
+
+timeCommand :: String -> App a -> App a
+timeCommand prompt action = do
+    start <- liftIO  getTime
+    action' <- action
+    end <- liftIO getTime
+    say $ prompt ++ " took " ++ secs (end - start)
+    return action'
+
+
+sayContent :: String -> App ()
+sayContent prompt = do
+  (Cache cacheMVar) <- asks envCache
+  m <- liftIO $ readMVar cacheMVar
+  say $ prompt ++ ":" ++ show (keys m)
 
 {-
 run :: IO ()

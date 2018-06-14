@@ -3,31 +3,39 @@
 
 module FileCache where
 import           Control.Concurrent.Async (Async, async)
-import           Control.Concurrent.MVar  (modifyMVar, newMVar, readMVar)
-import           Control.Exception        (Exception)
-import           Control.Exception.Safe   (catch, onException, throw, throwIO)
+import           Control.Concurrent.MVar  (modifyMVar, modifyMVar_, newMVar,
+                                           withMVar)
+import           Control.Exception.Safe   (catch, onException, throwIO)
+import           Control.Monad            (filterM)
 import           Control.Monad.Reader     (ask, asks, liftIO, runReaderT)
-import           Data.Map.Strict          as M (Map, empty, insert, keys,
-                                                lookup)
-import           Data.Maybe               (maybe)
+import           Data.List                (isSuffixOf)
+import           Data.Map.Strict          as M (Map, delete, empty, fromList,
+                                                insert, keys, lookup)
 import           Env                      (App, Cache (..), Env (..))
 import           Files                    (downloadURL)
 import           Log
-import           Network.URI              (parseURI, uriPath)
-import           System.Directory         (removeFile)
-import           System.FilePath.Posix    (takeFileName)
+import           System.Directory         (getDirectoryContents, removeFile)
 import           System.IO.Error          (isDoesNotExistError)
-
 type Key = String
 type Value = String
 
 empty :: IO (Cache k v)
-empty = Cache <$> newMVar M.empty
+empty = cache M.empty
 
-printContent ::  (Show k, Show v) => String -> Cache k v -> IO ()
-printContent prompt (Cache mvar) = readMVar mvar >>= (\m -> putStrLn $ prompt ++ ":" ++ show (keys m))
+cache :: M.Map k (Async v) -> IO (Cache k v)
+cache m = Cache <$> newMVar m
 
-getOrCompute :: Key -> App Value -> App (Async Value)
+keys :: Cache k v -> IO [k]
+keys (Cache mvar) = withMVar mvar $ return . M.keys
+
+
+fromFile :: FilePath -> IO (Cache String String)
+fromFile dir = do
+  content <-  getDirectoryContents dir >>= filterM (return . isSuffixOf ".zip")
+  asyncs <- mapM (async . return) content
+  cache $ M.fromList $ zip content asyncs
+
+getOrCompute :: Key ->  App Value -> App (Async Value)
 getOrCompute key compute = do
   (Cache cacheMVar) <- asks envCache
   env <- ask
@@ -41,25 +49,16 @@ getOrCompute key compute = do
                           return (M.insert key value m, value)
 
 
-getFilePath :: Key -> App (Async Value)
-getFilePath url = getOrCompute url download
+getFilePath :: Key -> String-> App (Async Value)
+getFilePath path url = getOrCompute path download
   where
-  download:: App String
-  download =  downloadURL url path `onException` cleanup path
-              where path = urlToLocalPath url
-  cleanup:: String -> App ()
-  cleanup file = do
-    say $ "cleanup: deleting file " ++ file
-    liftIO $ removeIfExists file
+     download:: App String
+     download =  downloadURL path url `onException` cleanup path
+     cleanup:: String -> App ()
+     cleanup file = do
+          say $ "cleanup: deleting file " ++ file
+          liftIO $ removeIfExists file
 
-
-newtype ParseURLException = ParseURLException String
-    deriving (Show,  Eq)
-
-instance Exception ParseURLException
-
-urlToLocalPath :: String -> String
-urlToLocalPath url = maybe (throw $ ParseURLException url) (takeFileName . uriPath) (parseURI  url)
 
 removeIfExists :: FilePath -> IO ()
 removeIfExists fileName = removeFile fileName `catch` handleExists
@@ -68,4 +67,8 @@ removeIfExists fileName = removeFile fileName `catch` handleExists
           | otherwise = throwIO e
 
 
-
+removeEntry :: Key -> App ()
+removeEntry key = do
+  (Cache cacheMVar) <- asks envCache
+  liftIO $ modifyMVar_ cacheMVar (return . M.delete key)
+  return ()
