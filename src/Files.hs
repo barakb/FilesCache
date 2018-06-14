@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Files where
 
@@ -16,22 +17,24 @@ import           Network.HTTP.Simple          (getResponseBody,
                                                getResponseHeader,
                                                getResponseStatus, httpSource)
 import           Network.HTTP.Types.Status    (statusMessage)
+import           Control.Monad.Reader(MonadReader, MonadIO, asks)
+import           Env (Env(..))
+
 
 showAsMB ::Int -> String
 showAsMB bytes = showFFloat (Just 2) (fromIntegral bytes / (1024 ** 2)) " MB"
 
-url1::String
-url1 = "http://hercules/12.3.1/master/19208-19/gigaspaces-xap-enterprise-12.3.1-m9-b19208-19.zip"
-
-downloadURL :: String -> FilePath -> IO ()
+downloadURL ::  (MonadReader Env m, MonadIO m) => String -> FilePath -> m String
 downloadURL url location = do
-  request <- parseUrlThrow url
-  runResourceT
-         $ runConduit $  httpSource request processResponse
+  logFunction <- asks envLog
+  request <- liftIO $ parseUrlThrow url
+  liftIO $ runResourceT
+         $ runConduit $  httpSource request (processResponse logFunction)
          .| sinkFile location
-   where
-     processResponse response = do
-         liftIO $ putStrLn $ (BC.unpack . statusMessage . getResponseStatus) response ++ " (" ++ formatSize response ++ ") " ++ url
+  return location
+  where
+     processResponse logFunction response = do
+         _ <- liftIO $ logFunction $ (BC.unpack . statusMessage . getResponseStatus) response ++ " (" ++ formatSize response ++ ") " ++ url
          getResponseBody response
      formatSize response = maybe "unknown" showAsMB (listToMaybe (getResponseHeader "Content-Length" response) >>= stringToInt . BC.unpack)
 

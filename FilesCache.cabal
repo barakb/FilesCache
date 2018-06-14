@@ -39,4 +39,5 @@ executable FilesCache
                      , unix
                      , text
                      , criterion
+                     , time
                      , warp == 3.2.22

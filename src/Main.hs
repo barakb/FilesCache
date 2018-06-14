@@ -3,21 +3,20 @@
 module Main where
 
 
-import           Control.Concurrent.Async  (wait)
-import           Control.Monad.Reader      (ReaderT, liftIO, runReaderT)
+import           Control.Concurrent.Async  (waitCatch)
+import           Control.Monad.Reader      (liftIO, runReaderT)
 import           Criterion.Measurement     (getTime, secs)
 import           Data.List                 (intercalate)
 import           Data.Text                 as T (unpack)
-import           Env                       (Env (..))
+import           Env                       (App, Env (..))
 import           FileCache                 (empty, getFilePath)
-import           Log                       (createLogF, log)
+import           Log                       (createLogF, say)
 import           Network.HTTP.Types        (notFound404, status200)
 import           Network.HTTP.Types.Header (hContentType)
 import           Network.Wai               (Application, Request (..), Response,
                                             ResponseReceived, responseFile,
                                             responseLBS)
 import           Network.Wai.Handler.Warp  (run)
-import           Prelude                   hiding (log)
 import           System.FilePath.Posix     (takeExtension)
 
 
@@ -34,17 +33,19 @@ main = do
 app :: Env -> Application
 app env req respond  =  runReaderT (runWithEnv req respond) env
 
-runWithEnv :: Request -> (Response -> IO ResponseReceived) -> ReaderT Env IO ResponseReceived
+runWithEnv :: Request -> (Response -> IO ResponseReceived) -> App ResponseReceived
 runWithEnv request respond =
     case getRequestedFileName request of
         Just (fullPath, fileName) -> do
-           log $ "request for: " ++ fileName ++ " full path is " ++ fullPath
+           say $ "request for: " ++ fileName ++ " full path is " ++ fullPath
            asyn <- getFilePath fullPath
-           (t , maybeFile) <- liftIO $ timeIt $ wait asyn
-           log $ fullPath ++ " took " ++ secs t
+           (t , maybeFile) <- liftIO $ timeIt $ waitCatch asyn
+           say $ fullPath ++ " took " ++ secs t
            case maybeFile of
-              Just localPath -> liftIO $ respond $ responseFile status200 [(hContentType, "text/plain")] localPath Nothing
-              Nothing -> liftIO $ respond $ responseLBS notFound404 [(hContentType, "text/plain")] "Failed to bring file to cache"
+              Right localPath -> liftIO $ respond $ responseFile status200 [(hContentType, "text/plain")] localPath Nothing
+              Left err -> do
+               say $ "Error while trying to retrieve " ++ fullPath ++ " " ++ show err
+               liftIO $ respond $ responseLBS notFound404 [(hContentType, "text/plain")] "Failed to bring file to cache"
         Nothing -> liftIO $ respond $ responseLBS notFound404 [(hContentType, "text/plain")] "Not Found"
 
 --        ["file","gigaspaces-xap-enterprise-12.3.1-m9-b19208-19.zip"]

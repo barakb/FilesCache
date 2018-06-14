@@ -1,21 +1,25 @@
+{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
+
 module FileCache where
 import           Control.Concurrent.Async (Async, async)
 import           Control.Concurrent.MVar  (modifyMVar, newMVar, readMVar)
-import           Control.Exception.Safe   (catch, onException, throwIO)
-import           Data.Map.Strict          as M (Map, empty, insert, lookup, keys)
+import           Control.Exception        (Exception)
+import           Control.Exception.Safe   (catch, onException, throw, throwIO)
+import           Control.Monad.Reader     (ask, asks, liftIO, runReaderT)
+import           Data.Map.Strict          as M (Map, empty, insert, keys,
+                                                lookup)
+import           Data.Maybe               (maybe)
+import           Env                      (App, Cache (..), Env (..))
 import           Files                    (downloadURL)
+import           Log
 import           Network.URI              (parseURI, uriPath)
 import           System.Directory         (removeFile)
 import           System.FilePath.Posix    (takeFileName)
 import           System.IO.Error          (isDoesNotExistError)
-import           System.Posix             (FileOffset, fileSize, getFileStatus)
-import           Env (Cache(..), Env(..))
-import           Control.Monad.Reader(MonadReader, MonadIO, liftIO, asks)
 
-
-
+type Key = String
+type Value = String
 
 empty :: IO (Cache k v)
 empty = Cache <$> newMVar M.empty
@@ -23,43 +27,39 @@ empty = Cache <$> newMVar M.empty
 printContent ::  (Show k, Show v) => String -> Cache k v -> IO ()
 printContent prompt (Cache mvar) = readMVar mvar >>= (\m -> putStrLn $ prompt ++ ":" ++ show (keys m))
 
-get :: forall k v . (Ord k, Show k, Show v) => k -> Cache k v -> IO (Maybe v) -> IO (Async (Maybe v))
-get key (Cache mvar) compute = modifyMVar mvar getOrUpdate
+getOrCompute :: Key -> App Value -> App (Async Value)
+getOrCompute key compute = do
+  (Cache cacheMVar) <- asks envCache
+  env <- ask
+  liftIO $ modifyMVar cacheMVar (getOrUpdate env)
   where
-    getOrUpdate :: M.Map k  (Async (Maybe v)) -> IO(M.Map k  (Async (Maybe v)), Async (Maybe v))
-    getOrUpdate m = do
-      putStrLn $ "searching for " ++ show key ++ " keys in maps are " ++ show (M.keys m)
-      case M.lookup key m of
-        Just value -> putStrLn ("resource " ++ show key ++ " found in, waiting on computation") >> return (m, value)
-        Nothing -> do
-                     putStrLn $ "resource " ++ show key ++ " not found, recomputing"
-                     value <- async compute
-                     return (M.insert key value m, value)
+    getOrUpdate :: Env -> Map Key (Async Value) -> IO (Map Key (Async Value), Async Value)
+    getOrUpdate env m = case M.lookup key m of
+                      Just value -> return (m, value)
+                      Nothing -> do
+                          value <- async $ runReaderT compute env
+                          return (M.insert key value m, value)
 
 
-getFilePath :: (MonadReader Env m, MonadIO m) => String -> m (Async (Maybe String))
-getFilePath url = do
-  cache <- asks envCache
-  liftIO $ get url cache download
+getFilePath :: Key -> App (Async Value)
+getFilePath url = getOrCompute url download
   where
-  download:: IO (Maybe String)
-  download = case urlToLocalPath url of
-                  Just p ->  downloadFile p `onException` cleanup p
-                  Nothing -> return Nothing
-  downloadFile:: String -> IO (Maybe String)
-  downloadFile file = do
-                      _ <- downloadURL url file
-                      return $ Just file
-  cleanup:: String -> IO ()
+  download:: App String
+  download =  downloadURL url path `onException` cleanup path
+              where path = urlToLocalPath url
+  cleanup:: String -> App ()
   cleanup file = do
-    putStrLn $ "cleanup: deleting file " ++ file
-    removeIfExists file
-    return ()
+    say $ "cleanup: deleting file " ++ file
+    liftIO $ removeIfExists file
 
 
+newtype ParseURLException = ParseURLException String
+    deriving (Show,  Eq)
 
-urlToLocalPath :: String -> Maybe String
-urlToLocalPath url = takeFileName . uriPath <$> parseURI  url
+instance Exception ParseURLException
+
+urlToLocalPath :: String -> String
+urlToLocalPath url = maybe (throw $ ParseURLException url) (takeFileName . uriPath) (parseURI  url)
 
 removeIfExists :: FilePath -> IO ()
 removeIfExists fileName = removeFile fileName `catch` handleExists
