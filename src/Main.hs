@@ -21,7 +21,6 @@ import           Network.Wai.Handler.Warp  (run)
 import           System.FilePath.Posix     (takeExtension)
 
 
-
 main :: IO ()
 main = do
   let port = 3000
@@ -53,12 +52,6 @@ runWithEnv request respond =
                 liftIO $ respond $ responseLBS notFound404 [(hContentType, "text/plain")] "Failed to bring file to cache"
         Nothing -> liftIO $ respond $ responseLBS notFound404 [(hContentType, "text/plain")] "Not Found"
 
-removeFiles :: [String] -> App ()
-removeFiles [] = return ()
-removeFiles files = do
-  sayContent $ "Removing files " ++ show files ++ ", cache is: "
-  liftIO $ mapM_ removeIfExists files
-  return ()
 
 
 getRequestedFileName :: Request -> Maybe (String, String)
@@ -70,5 +63,12 @@ getRequestedFileName req = let pathInfo' =  T.unpack <$> pathInfo req
                                   Just ("http://" ++ intercalate "/" (drop 1 pathInfo'), last pathInfo')
                                else
                                   Nothing
+
+removeFiles :: [String] -> App ()
+removeFiles [] = return ()
+removeFiles files = do
+  sayContent $ "Removing files " ++ show files ++ ", cache is: "
+  liftIO $ mapM_ removeIfExists files
+  return ()
 
 -- http://localhost:3000/file/hercules/12.3.1/master/19209-63/gigaspaces-xap-enterprise-12.3.1-rc2-b19209-63.zip
