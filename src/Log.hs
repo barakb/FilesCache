@@ -3,12 +3,11 @@ module Log where
 import Control.Concurrent.MVar  (MVar, newMVar, takeMVar, putMVar, readMVar)
 import Control.Exception (bracket)
 import Control.Monad.Reader
-import Env
+import Env(ProtectedCache(..), App(), Env(..))
 import Control.Concurrent (myThreadId)
 import Data.Time.Clock(getCurrentTime)
 import Data.Time.Format(formatTime, defaultTimeLocale)
 import           Criterion.Measurement(getTime, secs)
-import           Data.Map.Strict          as M (keys)
 
 
 logf :: MVar Bool -> String -> IO ()
@@ -42,17 +41,7 @@ timeCommand prompt action = do
 
 sayContent :: String -> App ()
 sayContent prompt = do
-  (Cache cacheMVar) <- asks envCache
+  (ProtectedCache cacheMVar) <- asks envCache
   m <- liftIO $ readMVar cacheMVar
-  say $ prompt ++ ":" ++ show (keys m)
-
-{-
-run :: IO ()
-run = do
-  logMvar <- newMVar True
-  let env = Env
-          {envLog = logf logMvar}
-  runReaderT (log "foo") env
--}
-
+  say $ prompt ++ ":" ++ show m
 

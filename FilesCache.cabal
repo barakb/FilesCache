@@ -17,7 +17,7 @@ executable FilesCache
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
-  other-modules:       FileCache, Files, Log, Env
+  other-modules:       FileCache, Files, Log, Env, LRUCache
   build-depends:       base >= 4.7 && < 5
                      , containers
                      , bytestring
@@ -40,4 +40,5 @@ executable FilesCache
                      , text
                      , criterion
                      , time
+                     , sort
                      , warp == 3.2.22
