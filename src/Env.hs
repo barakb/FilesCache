@@ -4,13 +4,26 @@ import           Control.Concurrent.MVar  (MVar)
 import           Control.Monad.Reader     (ReaderT)
 import           Data.Int                 (Int64)
 import           Data.Map.Strict          as M (Map, elems, keys)
+import           Data.Monoid              ((<>))
+import           Data.Text                as T hiding (zip)
+
 
 type App = ReaderT Env IO
 
 data Env = Env{
-  envLog   :: !(String -> IO ()),
-  envCache :: !(ProtectedCache String String)
+  envLog   :: !(Text -> IO ()),
+  envCache :: !(ProtectedCache Text Text),
+  config   :: !Config
 }
+
+data Config = Config {
+  cacheSize :: Int,
+  cacheDir  :: String
+} deriving Show
+
+
+cacheDirPrefix :: Config -> Text
+cacheDirPrefix conf = (T.pack . cacheDir) conf <> "/"
 
 type Priority = Int64
 

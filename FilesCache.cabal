@@ -13,10 +13,12 @@ build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
 
-executable FilesCache
+executable filesCache
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
+  default-extensions:  OverloadedStrings, FlexibleContexts
+  ghc-options: -Wall
   other-modules:       FileCache, Files, Log, Env, LRUCache
   build-depends:       base >= 4.7 && < 5
                      , containers
@@ -41,4 +43,6 @@ executable FilesCache
                      , criterion
                      , time
                      , sort
+                     , safe
+                     , optparse-applicative
                      , warp == 3.2.22

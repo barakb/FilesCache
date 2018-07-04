@@ -1,4 +1,3 @@
-{-# LANGUAGE FlexibleContexts    #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module FileCache where
@@ -10,6 +9,8 @@ import           Control.Monad            (filterM)
 import           Control.Monad.Reader     (ask, asks, liftIO, runReaderT)
 import           Data.List                (isSuffixOf)
 import           Data.Map.Strict          as M (delete, keys)
+import           Data.Monoid              ((<>))
+import qualified Data.Text                as T
 import           Env                      (App, Env (..), LRUCache (..),
                                            ProtectedCache (..))
 import           Files                    (downloadURL)
@@ -18,18 +19,18 @@ import           LRUCache                 as LRU
 import           System.Directory         (getDirectoryContents, removeFile)
 import           System.IO.Error          (isDoesNotExistError)
 
-type Key = String
-type Value = String
+type Key = T.Text
+type Value = T.Text
 
 keys :: ProtectedCache k v -> IO [k]
 keys pc = withMVar (pMvar pc) $ return . M.keys . cCache
 
 
-fromDirectory :: Int -> FilePath -> IO (ProtectedCache String String)
+fromDirectory :: Int -> FilePath -> IO (ProtectedCache T.Text T.Text)
 fromDirectory capacity dir = do
   content <-  getDirectoryContents dir
-  validContent <- filterM (return . isSuffixOf ".zip") content
-  lruCache <- LRU.fromList capacity validContent
+  validContent <- filterM (return . Data.List.isSuffixOf ".zip") content
+  lruCache <- LRU.fromList capacity (map T.pack validContent)
   withLock <- newMVar lruCache
   return $ ProtectedCache withLock
 
@@ -48,19 +49,19 @@ getOrCompute key compute =  do
           return (modifiedCache, (keysToRemove, value))
 
 
-getFilePath :: Key -> String-> App ([Key], Async Value)
+getFilePath :: Key -> T.Text-> App ([Key], Async Value)
 getFilePath path url = getOrCompute path download
   where
-     download:: App String
+     download:: App T.Text
      download =  downloadURL path url `onException` cleanup path
-     cleanup:: String -> App ()
+     cleanup:: T.Text -> App ()
      cleanup file = do
-          say $ "cleanup: deleting file " ++ file
+          say $ "cleanup: deleting file " <> file
           liftIO $ removeIfExists file
 
 
-removeIfExists :: FilePath -> IO ()
-removeIfExists fileName = removeFile fileName `catch` handleExists
+removeIfExists :: T.Text -> IO ()
+removeIfExists fileName = removeFile (T.unpack fileName) `catch` handleExists
   where handleExists e
           | isDoesNotExistError e = return ()
           | otherwise = throwIO e

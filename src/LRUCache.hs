@@ -6,17 +6,18 @@ import           Data.Map.Strict          as M (assocs, delete, empty, fromList,
                                                 insert, lookup)
 
 import           Data.Sort                (sortOn)
+import           Data.Text
 import           Env
 
 empty :: Int ->  LRUCache k v
 empty capacity = LRUCache capacity 0 0 M.empty
 
-fromList :: Int -> [String] -> IO (LRUCache String String)
+fromList :: Int -> [Text] -> IO (LRUCache Text Text)
 fromList capacity list = do
   asyncs <- mapM (async . return) list
-  let size = length list
-      values = zipWith Value asyncs [0 .. ]
-      m = M.fromList $ zip list values
+  let size = Prelude.length list
+      values = Prelude.zipWith Value asyncs [0 .. ]
+      m = M.fromList $ Prelude.zip list values
   return $ LRUCache capacity size (fromIntegral size) m
 
 
@@ -52,7 +53,7 @@ adjustSize c@(LRUCache capacity size  _ cache) =
   then ([], c)
   else let
            sortedEntries = sortOn (lmt . snd) $ M.assocs cache
-           keysToRemove = take(size - capacity) $  map fst $ sortedEntries
+           keysToRemove = Prelude.take(size - capacity) $ fst <$> sortedEntries
 
        in
-            (keysToRemove, foldl' (flip LRUCache.delete) c keysToRemove)
+            (keysToRemove, Data.Foldable.foldl' (flip LRUCache.delete) c keysToRemove)

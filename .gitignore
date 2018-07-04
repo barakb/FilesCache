@@ -4,3 +4,5 @@ TAGS
 .stack-work
 .idea
 *.zip
+cabal.config
+out
